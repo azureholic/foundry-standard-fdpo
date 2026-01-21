@@ -4,6 +4,9 @@ param aiFoundryName string
 @description('AI Foundry Project name')
 param projectName string
 
+@description('Location for resources')
+param location string
+
 @description('AI Search resource ID')
 param aiSearchResourceId string
 
@@ -31,6 +34,15 @@ param applicationInsightsName string
 @description('Application Insights connection string')
 @secure()
 param applicationInsightsConnectionString string
+
+@description('Storage Account endpoint')
+param storageAccountEndpoint string
+
+@description('Storage Account resource ID')
+param storageAccountResourceId string
+
+@description('Storage Account name')
+param storageAccountName string
 
 // Reference to existing AI Foundry
 resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' existing = {
@@ -67,26 +79,18 @@ resource aiSearchFoundryConnection 'Microsoft.CognitiveServices/accounts/connect
   }
 }
 
-// AI Search Connection at Project level
+// AI Search Connection at Project level (name matches resource name for capability host reference)
 resource aiSearchProjectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
   parent: aiFoundryProject
-  name: '${aiSearchName}-proj-connection'
+  name: aiSearchName
   properties: {
     authType: 'AAD'
     category: 'CognitiveSearch'
     target: aiSearchEndpoint
-    useWorkspaceManagedIdentity: true
-    isSharedToAll: true
-    sharedUserList: []
-    peRequirement: 'NotRequired'
-    peStatus: 'NotApplicable'
     metadata: {
-      displayName: aiSearchName
-      type: 'azure_ai_search'
       ApiType: 'Azure'
       ResourceId: aiSearchResourceId
-      ApiVersion: '2024-05-01-preview'
-      DeploymentApiVersion: '2023-11-01'
+      location: location
     }
   }
 }
@@ -159,33 +163,45 @@ resource appInsightsProjectConnection 'Microsoft.CognitiveServices/accounts/proj
   }
 }
 
-// Cosmos DB Connection at Project level
+// Cosmos DB Connection at Project level (name matches resource name for capability host reference)
 resource cosmosDbProjectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
   parent: aiFoundryProject
-  name: '${cosmosDbName}-proj-connection'
+  name: cosmosDbName
   properties: {
     authType: 'AAD'
     category: 'CosmosDB'
     target: cosmosDbEndpoint
-    useWorkspaceManagedIdentity: true
-    isSharedToAll: true
-    sharedUserList: []
-    peRequirement: 'NotRequired'
-    peStatus: 'NotApplicable'
     metadata: {
-      displayName: cosmosDbName
-      type: 'azure_cosmos_db'
       ApiType: 'Azure'
       ResourceId: cosmosDbResourceId
-      ApiVersion: '2024-05-15'
-      DeploymentApiVersion: '2023-11-01'
+      location: location
+    }
+  }
+}
+
+// Storage Account Connection at Project level (name matches resource name for capability host reference)
+resource storageProjectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
+  parent: aiFoundryProject
+  name: storageAccountName
+  properties: {
+    authType: 'AAD'
+    category: 'AzureStorageAccount'
+    target: storageAccountEndpoint
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: storageAccountResourceId
+      location: location
     }
   }
 }
 
 output aiSearchFoundryConnectionId string = aiSearchFoundryConnection.id
 output aiSearchProjectConnectionId string = aiSearchProjectConnection.id
+output aiSearchProjectConnectionName string = aiSearchName  // Just the resource name
 output cosmosDbFoundryConnectionId string = cosmosDbFoundryConnection.id
 output cosmosDbProjectConnectionId string = cosmosDbProjectConnection.id
+output cosmosDbProjectConnectionName string = cosmosDbName  // Just the resource name
+output storageProjectConnectionId string = storageProjectConnection.id
+output storageProjectConnectionName string = storageAccountName  // Just the resource name
 output appInsightsFoundryConnectionId string = appInsightsFoundryConnection.id
 output appInsightsProjectConnectionId string = appInsightsProjectConnection.id

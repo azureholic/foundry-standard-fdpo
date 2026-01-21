@@ -42,6 +42,7 @@ var storageBlobDataOwnerRole = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b' // Storage
 var storageQueueDataContributorRole = '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // Storage Queue Data Contributor
 var cosmosDBAccountReaderRole = 'fbdf93bf-df7d-467e-a4d2-9458aa1360c8' // Cosmos DB Account Reader Role
 var cosmosDBDataContributorRole = '00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
+var cosmosDBOperatorRole = '230815da-be43-4aae-9cb4-875f7bd000aa' // Cosmos DB Operator (control plane)
 
 // ========================================
 // AI Search Role Assignments
@@ -139,6 +140,17 @@ resource cosmosDBAccountReaderRoleProject 'Microsoft.Authorization/roleAssignmen
   }
 }
 
+// Grant Project access to Cosmos DB (Operator for control plane - create databases/containers)
+resource cosmosDBOperatorRoleProject 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(cosmosDb.id, cosmosDBOperatorRole, aiFoundryProjectPrincipalId)
+  scope: cosmosDb
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cosmosDBOperatorRole)
+    principalId: aiFoundryProjectPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Grant Project access to Cosmos DB (Built-in Data Contributor for data plane operations)
 resource cosmosDBDataContributorRoleProject 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   name: guid(cosmosDb.id, cosmosDBDataContributorRole, aiFoundryProjectPrincipalId)
@@ -156,5 +168,6 @@ output storageBlobDataContributorRoleAssignment string = storageBlobDataContribu
 output storageBlobDataOwnerRoleAssignment string = storageBlobDataOwnerRoleProject.id
 output storageQueueDataContributorRoleAssignment string = storageQueueDataContributorRoleProject.id
 output cosmosDBAccountReaderRoleAssignment string = cosmosDBAccountReaderRoleProject.id
+output cosmosDBOperatorRoleAssignment string = cosmosDBOperatorRoleProject.id
 output storageBlobDataReaderRoleAssignmentSearch string = storageBlobDataReaderRoleSearch.id
 output cognitiveServicesOpenAIUserRoleAssignmentSearch string = cognitiveServicesOpenAIUserRoleSearch.id

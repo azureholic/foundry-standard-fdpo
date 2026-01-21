@@ -113,7 +113,7 @@ module roleAssignments 'modules/roleAssignments.bicep' = {
   }
 }
 
-// Module 8: Project Connections for AI Search and Cosmos DB
+// Module 8: Project Connections for AI Search, Cosmos DB, and Storage
 module projectConnections 'modules/projectConnections.bicep' = {
   name: 'projectConnections-deployment'
   dependsOn: [
@@ -122,15 +122,31 @@ module projectConnections 'modules/projectConnections.bicep' = {
   params: {
     aiFoundryName: aiFoundry.outputs.name
     projectName: defaultProjectName
+    location: location
     aiSearchResourceId: aiSearch.outputs.resourceId
     aiSearchName: aiSearch.outputs.name
     aiSearchEndpoint: aiSearch.outputs.endpoint
     cosmosDbResourceId: cosmosDb.outputs.resourceId
     cosmosDbName: cosmosDb.outputs.name
     cosmosDbEndpoint: cosmosDb.outputs.endpoint
+    storageAccountResourceId: storageAccount.outputs.resourceId
+    storageAccountName: storageAccount.outputs.name
+    storageAccountEndpoint: storageAccount.outputs.blobEndpoint
     applicationInsightsResourceId: appInsights.outputs.resourceId
     applicationInsightsName: applicationInsightsName
     applicationInsightsConnectionString: appInsights.outputs.connectionString
+  }
+}
+
+// Module 9: Capability Hosts for Agents (Standard Agent Setup)
+module capabilityHosts 'modules/capabilityHosts.bicep' = {
+  name: 'capabilityHosts-deployment'
+  params: {
+    accountName: aiFoundry.outputs.name
+    projectName: defaultProjectName
+    aiSearchConnectionName: projectConnections.outputs.aiSearchProjectConnectionName
+    storageConnectionName: projectConnections.outputs.storageProjectConnectionName
+    cosmosDbConnectionName: projectConnections.outputs.cosmosDbProjectConnectionName
   }
 }
 
@@ -150,3 +166,6 @@ output cosmosDbFoundryConnectionId string = projectConnections.outputs.cosmosDbF
 output cosmosDbProjectConnectionId string = projectConnections.outputs.cosmosDbProjectConnectionId
 output appInsightsFoundryConnectionId string = projectConnections.outputs.appInsightsFoundryConnectionId
 output appInsightsProjectConnectionId string = projectConnections.outputs.appInsightsProjectConnectionId
+output storageProjectConnectionId string = projectConnections.outputs.storageProjectConnectionId
+output accountCapabilityHostId string = capabilityHosts.outputs.accountCapabilityHostId
+output projectCapabilityHostId string = capabilityHosts.outputs.projectCapabilityHostId
