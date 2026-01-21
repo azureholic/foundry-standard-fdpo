@@ -7,15 +7,15 @@ Infrastructure as Code (IaC) for deploying a complete Azure AI Foundry environme
 This Bicep deployment creates a production-ready Azure AI Foundry environment with:
 
 - **Azure AI Foundry** - AI Services account with project management
-- **AI Search** - Cognitive search service for RAG patterns
+- **AI Search** - Cognitive search service for RAG patterns with AI vectorization
 - **Cosmos DB** - NoSQL database for application data
 - **Storage Account** - Blob storage with "knowledge" container for document indexing
-- **Key Vault** - Secure secrets management
+- **Log Analytics** - Centralized logging workspace
 - **Application Insights** - Monitoring and telemetry
 - **Embedding Model** - text-embedding-3-small deployment (configurable)
 
 All resources are configured with:
-- ✅ **Managed Identity authentication** (keyless)
+- ✅ **Managed Identity authentication** (keyless, except Application Insights)
 - ✅ **RBAC role assignments** for secure cross-service access
 - ✅ **Service connections** between AI Foundry and dependent resources
 - ✅ **Production-ready defaults**
@@ -30,10 +30,10 @@ All resources are configured with:
 │  │  └─ Embedding Model: text-embedding-3-small          │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           │                                  │
-│  Connections (AAD Auth):  │                                  │
-│  ├─ AI Search ────────────┼─────────────────────────────────┤
-│  ├─ Cosmos DB ────────────┼─────────────────────────────────┤
-│  └─ Storage Account ──────┼─────────────────────────────────┤
+│  Connections:             │                                  │
+│  ├─ AI Search (AAD) ──────┼─────────────────────────────────┤
+│  ├─ Cosmos DB (AAD) ──────┼─────────────────────────────────┤
+│  └─ App Insights (ApiKey) ┼─────────────────────────────────┤
 └───────────────────────────┼──────────────────────────────────┘
                             │
               ┌─────────────┴──────────────┐
@@ -43,8 +43,22 @@ All resources are configured with:
          │          │               │  Account   │
          │ (indexes │◄──────────────┤            │
          │documents)│   reads from  │ Container: │
-         └──────────┘               │ knowledge  │
-                                    └────────────┘
+         │    +     │               │ knowledge  │
+         │ vectors  │               └────────────┘
+         │   via    │
+         │embedding │
+         │  model   │
+         └────┬─────┘
+              │ calls embedding
+              │ (Cognitive Services OpenAI User)
+              │
+         ┌────▼─────┐               ┌─────────────┐
+         │   AI     │               │Log Analytics│
+         │ Foundry  │               │             │
+         │Embedding │               │  ┌──────────┤
+         │  Model   │               │  │   App    │
+         └──────────┘               │  │ Insights │
+                                    └──┴──────────┘
 ```
 
 ## Prerequisites
@@ -105,8 +119,8 @@ az deployment group show \
 | `name` | AI Foundry account name | - |
 | `location` | Azure region | swedencentral |
 | `defaultProjectName` | Project name | proj-default |
+| `logAnalyticsWorkspaceName` | Log Analytics workspace name | - |
 | `applicationInsightsName` | App Insights name | - |
-| `keyVaultConnectionName` | Key Vault name | - |
 | `aiSearchName` | AI Search service name | - |
 | `storageAccountName` | Storage account name | - |
 | `cosmosDbName` | Cosmos DB account name | - |
@@ -127,14 +141,14 @@ param embeddingDeploymentCapacity = 80  // Lower TPM for larger model
 
 ## Resources Deployed
 
-### Module 1: Application Insights
-Monitoring and telemetry for all services.
+### Module 1: Log Analytics Workspace
+Centralized logging workspace for Application Insights and other monitoring services.
 
-### Module 2: Key Vault
-Secure storage for secrets and keys. AI Foundry has Secrets User and Officer roles.
+### Module 2: Application Insights
+Monitoring and telemetry connected to Log Analytics workspace. Uses ApiKey authentication for connections.
 
 ### Module 3: AI Search
-Search service with system-assigned managed identity. Has Storage Blob Data Reader role for indexing.
+Search service with system-assigned managed identity. Has Storage Blob Data Reader role for indexing and Cognitive Services OpenAI User role for embedding vectorization.
 
 ### Module 4: Storage Account
 - Includes blob service with "knowledge" container
@@ -147,20 +161,21 @@ NoSQL database with system-assigned managed identity and data plane RBAC.
 ### Module 6: AI Foundry
 - AI Services account with project management enabled
 - Default project with system-assigned managed identity
-- Embedding model deployment
+- Embedding model deployment (used by AI Search for vectorization)
 
 ### Module 7: Role Assignments
 Configures RBAC permissions:
-- **AI Foundry** → Key Vault (Secrets User/Officer)
 - **AI Search** → Storage (Blob Data Reader)
+- **AI Search** → AI Foundry (Cognitive Services OpenAI User for embedding access)
 - **Project** → AI Search (Index Data Contributor, Service Contributor)
 - **Project** → Storage (Blob Data Contributor, Owner, Queue Contributor)
 - **Project** → Cosmos DB (Account Reader, Data Contributor)
 
 ### Module 8: Project Connections
-Creates service connections using AAD authentication:
-- AI Search connections (Foundry + Project level)
-- Cosmos DB connections (Foundry + Project level)
+Creates service connections:
+- AI Search connections (AAD authentication, Foundry + Project level)
+- Cosmos DB connections (AAD authentication, Foundry + Project level)
+- Application Insights connections (ApiKey authentication, Foundry + Project level)
 
 ## Outputs
 
@@ -172,15 +187,17 @@ The deployment provides the following outputs:
   "aiFoundryName": "Account name",
   "aiFoundryProjectId": "Project resource ID",
   "embeddingDeploymentName": "Embedding deployment name",
+  "logAnalyticsWorkspaceId": "Log Analytics workspace resource ID",
   "applicationInsightsId": "App Insights resource ID",
-  "keyVaultId": "Key Vault resource ID",
   "aiSearchId": "AI Search resource ID",
   "storageAccountId": "Storage account resource ID",
   "cosmosDbId": "Cosmos DB resource ID",
   "aiSearchFoundryConnectionId": "AI Search connection ID (Foundry)",
   "aiSearchProjectConnectionId": "AI Search connection ID (Project)",
   "cosmosDbFoundryConnectionId": "Cosmos DB connection ID (Foundry)",
-  "cosmosDbProjectConnectionId": "Cosmos DB connection ID (Project)"
+  "cosmosDbProjectConnectionId": "Cosmos DB connection ID (Project)",
+  "appInsightsFoundryConnectionId": "App Insights connection ID (Foundry)",
+  "appInsightsProjectConnectionId": "App Insights connection ID (Project)"
 }
 ```
 
@@ -243,19 +260,22 @@ az monitor app-insights component show \
 
 Role assignments can take a few minutes to propagate. Wait 60 seconds and retry.
 
-### AI Search Can't Index Storage
+### AI Search Can't Index or Vectorize Documents
 
 Verify:
 1. AI Search managed identity has "Storage Blob Data Reader" role
-2. Storage account allows Azure services access
-3. Documents exist in "knowledge" container
+2. AI Search managed identity has "Cognitive Services OpenAI User" role on AI Foundry
+3. Storage account allows Azure services access
+4. Documents exist in "knowledge" container
+5. Embedding model is deployed and accessible
 
 ### Connection Authentication Fails
 
 Ensure:
 1. Role assignments module completed successfully
 2. Managed identities are enabled on all resources
-3. Service connections use `authType: 'AAD'`
+3. AI Search and Cosmos DB connections use `authType: 'AAD'`
+4. Application Insights connections use `authType: 'ApiKey'` with connection string
 
 ## Clean Up
 
