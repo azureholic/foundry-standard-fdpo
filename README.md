@@ -13,6 +13,7 @@ This Bicep deployment creates a production-ready Azure AI Foundry environment wi
 - **Log Analytics** - Centralized logging workspace
 - **Application Insights** - Monitoring and telemetry
 - **Embedding Model** - text-embedding-3-small deployment (configurable)
+- **Capability Hosts** - Agents capability for building AI agents with vector store, storage, and thread storage
 
 All resources are configured with:
 - ✅ **Managed Identity authentication** (keyless, except Application Insights)
@@ -82,6 +83,7 @@ param defaultProjectName = 'proj-default'
 
 ### 2. Deploy
 
+**Bash:**
 ```bash
 cd bicep
 
@@ -100,13 +102,42 @@ az deployment group create \
   --name foundry-deployment
 ```
 
+**PowerShell:**
+```powershell
+Set-Location bicep
+
+# Preview changes
+az deployment group create `
+  --resource-group rg-foundry-prod `
+  --template-file main.bicep `
+  --parameters '@main.bicepparam' `
+  --confirm-with-what-if
+
+# Deploy
+az deployment group create `
+  --resource-group rg-foundry-prod `
+  --template-file main.bicep `
+  --parameters '@main.bicepparam' `
+  --name foundry-deployment
+```
+
 ### 3. Verify Deployment
 
+**Bash:**
 ```bash
 # Get deployment outputs
 az deployment group show \
   --resource-group rg-foundry-prod \
   --name foundry-deployment \
+  --query properties.outputs
+```
+
+**PowerShell:**
+```powershell
+# Get deployment outputs
+az deployment group show `
+  --resource-group rg-foundry-prod `
+  --name foundry-deployment `
   --query properties.outputs
 ```
 
@@ -177,6 +208,14 @@ Creates service connections:
 - Cosmos DB connections (AAD authentication, Foundry + Project level)
 - Application Insights connections (ApiKey authentication, Foundry + Project level)
 
+### Module 9: Capability Hosts
+Configures agent capability hosts at both account and project levels:
+- **Account-level Agents capability** - Enables agent functionality for the AI Foundry account
+- **Project-level Agents capability** - Configures agents with:
+  - Vector store connections to AI Search for semantic search
+  - Storage connections for file handling
+  - Thread storage connections to Cosmos DB for conversation persistence
+
 ## Outputs
 
 The deployment provides the following outputs:
@@ -197,7 +236,9 @@ The deployment provides the following outputs:
   "cosmosDbFoundryConnectionId": "Cosmos DB connection ID (Foundry)",
   "cosmosDbProjectConnectionId": "Cosmos DB connection ID (Project)",
   "appInsightsFoundryConnectionId": "App Insights connection ID (Foundry)",
-  "appInsightsProjectConnectionId": "App Insights connection ID (Project)"
+  "appInsightsProjectConnectionId": "App Insights connection ID (Project)",
+  "accountCapabilityHostId": "Account-level agents capability host ID",
+  "projectCapabilityHostId": "Project-level agents capability host ID"
 }
 ```
 
@@ -205,10 +246,13 @@ The deployment provides the following outputs:
 
 ### Access AI Foundry
 
-```bash
-# Portal
+**Portal:**
+```
 https://ai.azure.com
+```
 
+**Bash:**
+```bash
 # Get endpoint
 az cognitiveservices account show \
   --name <foundry-name> \
@@ -216,8 +260,18 @@ az cognitiveservices account show \
   --query properties.endpoint
 ```
 
+**PowerShell:**
+```powershell
+# Get endpoint
+az cognitiveservices account show `
+  --name <foundry-name> `
+  --resource-group <rg-name> `
+  --query properties.endpoint
+```
+
 ### Upload Documents for Indexing
 
+**Bash:**
 ```bash
 # Upload to knowledge container
 az storage blob upload \
@@ -228,6 +282,17 @@ az storage blob upload \
   --auth-mode login
 ```
 
+**PowerShell:**
+```powershell
+# Upload to knowledge container
+az storage blob upload `
+  --account-name <storage-account-name> `
+  --container-name knowledge `
+  --name document.pdf `
+  --file ./document.pdf `
+  --auth-mode login
+```
+
 ### Access Cosmos DB
 
 The project has full data plane access via managed identity. Use Azure SDKs with DefaultAzureCredential.
@@ -235,6 +300,15 @@ The project has full data plane access via managed identity. Use Azure SDKs with
 ### Create AI Search Index
 
 The AI Search service can index documents from the "knowledge" container using its managed identity.
+
+### Build AI Agents
+
+With capability hosts enabled, you can build AI agents that:
+- Use AI Search for semantic search and retrieval
+- Store files and artifacts in the storage account
+- Persist conversation threads in Cosmos DB
+
+Access the agents capability through Azure AI Foundry Studio or SDKs using the project's managed identity.
 
 ## Security Features
 
@@ -248,9 +322,17 @@ The AI Search service can index documents from the "knowledge" container using i
 
 Application Insights is deployed and configured for monitoring. Access metrics and logs via:
 
+**Bash:**
 ```bash
 az monitor app-insights component show \
   --app <app-insights-name> \
+  --resource-group <rg-name>
+```
+
+**PowerShell:**
+```powershell
+az monitor app-insights component show `
+  --app <app-insights-name> `
   --resource-group <rg-name>
 ```
 
@@ -281,7 +363,13 @@ Ensure:
 
 To delete all resources:
 
+**Bash:**
 ```bash
+az group delete --name <resource-group-name> --yes --no-wait
+```
+
+**PowerShell:**
+```powershell
 az group delete --name <resource-group-name> --yes --no-wait
 ```
 
